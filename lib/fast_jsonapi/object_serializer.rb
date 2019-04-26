@@ -53,10 +53,11 @@ module FastJsonapi
 
       data = []
       included = []
-      fieldset = @fieldsets[self.class.record_type.to_sym]
       @resource.each do |record|
-        data << self.class.record_hash(record, fieldset, @params)
-        included.concat self.class.get_included_records(record, @includes, @known_included_objects, @fieldsets, @params) if @includes.present?
+        klass = serializer_class_for(record)
+        fieldset = @fieldsets[klass.record_type.to_sym]
+        data << klass.record_hash(record, fieldset, @params)
+        included.concat klass.get_included_records(record, @includes, @known_included_objects, @fieldsets, @params) if @includes.present?
       end
 
       serializable_hash[:data] = data
@@ -109,6 +110,11 @@ module FastJsonapi
       resource.respond_to?(:size) && !resource.respond_to?(:each_pair)
     end
 
+    def serializer_class_for(record)
+      return self.class unless self.class.class_serializers
+      self.class.class_serializers[record.class.name.to_sym] || self.class.class_serializers[:default] || self.class
+    end
+
     class_methods do
 
       def inherited(subclass)
@@ -124,6 +130,7 @@ module FastJsonapi
         subclass.cached = cached
         subclass.set_type(subclass.reflected_record_type) if subclass.reflected_record_type
         subclass.meta_to_serialize = meta_to_serialize
+        subclass.set_class_serializers({})
       end
 
       def reflected_record_type
@@ -172,6 +179,10 @@ module FastJsonapi
 
       def set_id(id_name = nil, &block)
         self.record_id = block || id_name
+      end
+
+      def set_class_serializers(**mapping)
+        self.class_serializers = mapping
       end
 
       def cache_options(cache_options)
